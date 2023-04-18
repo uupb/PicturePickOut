@@ -20,7 +20,7 @@ PNG Letter Processor is a Python application that processes PNG images containin
 
 1. Clone the repository or download the source code:
 
-git clone https://github.com/uupb/PNG-Letter-Processor.git
+git clone https://github.com/uupb/PicturePickOut.git
 
 
 2. Install the required Python libraries:
