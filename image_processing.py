@@ -3,7 +3,7 @@ import cv2
 import numpy as np
 from PIL import Image as PILImage
 
-def process_image(image_path, output_folder):
+def process_image(image_path):
     image = cv2.imread(image_path)
     gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
     _, thresh = cv2.threshold(gray, 127, 255, cv2.THRESH_BINARY)
@@ -14,9 +14,11 @@ def process_image(image_path, output_folder):
 
     first_term = os.path.basename(image_path).split('+')[0].split('_')[1]
 
+    cropped_images = []
+
     for i, c in enumerate(filtered_contours):
         x, y, w, h = cv2.boundingRect(c)
-        cropped_image = image[y:y+h, x:x+w]
+        cropped_image = image[y:y + h, x:x + w]
         cropped_pil_image = PILImage.fromarray(cv2.cvtColor(cropped_image, cv2.COLOR_BGR2RGB))
 
         background = PILImage.new("RGBA", cropped_pil_image.size, (255, 255, 255))
@@ -24,8 +26,9 @@ def process_image(image_path, output_folder):
         background.paste(cropped_pil_image, (0, 0), cropped_pil_image)
         cropped_pil_image = background.convert("RGB")
 
-        cropped_pil_image.save(os.path.join(output_folder, f"{first_term}_{i+1}.png"))
+        cropped_images.append((cropped_pil_image, f"{first_term}_{i + 1}.png"))
 
+    return cropped_images
 
 def filter_contours(contours):
     filtered_contours = []
