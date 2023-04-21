@@ -1,14 +1,19 @@
 import os
 import glob
+import threading
+
 from tkinter import filedialog, messagebox
 from tkinter import Toplevel, Canvas
 from tkinter import *
+
 from PIL import ImageTk
 from PIL import Image as PILImage
+
 from utils import save_last_selected_folder, load_last_selected_folder
 from image_processing import process_image
 
-
+# Global
+min_distance = 50
 
 
 def select_input():
@@ -22,7 +27,6 @@ def select_input():
     if input_path:
         input_label.config(text=input_path)
         save_last_selected_folder(input_path, 'input')
-
 
 
 def select_output():
@@ -46,7 +50,6 @@ def display_previews(cropped_images):
     canvas.bind("<Configure>", lambda e: canvas.configure(scrollregion=canvas.bbox("all")))
 
     container = Frame(canvas)
-    container.bind("<Configure>", lambda e: update_image_canvas(container, cropped_images))
     canvas.create_window(0, 0, anchor=NW, window=container)
 
     selected_images = set()
@@ -79,77 +82,91 @@ def display_previews(cropped_images):
     save_button = Button(preview_window, text="Save Selected", command=save_selected_images)
     save_button.pack(pady=10)
 
+
 def process_input():
+    input_path = input_label.cget("text")
+    output_path = output_label.cget("text")
+
+    if not input_path or not output_path:
+        messagebox.showerror("Error", "Please select input and output folders.")
+        return
+
+    cropped_images = []
+
+
+    if os.path.isfile(input_path):
+        try:
+            cropped_images.extend(process_image(input_path, min_distance))
+        except Exception as e:
+            messagebox.showerror("Error", f"Error processing file: {input_path}\n{e}")
+            return
+    else:
+        for file_path in glob.glob(os.path.join(input_path, "*.png")):
+            try:
+                cropped_images.extend(process_image(file_path))
+            except Exception as e:
+                messagebox.showerror("Error", f"Error processing file: {file_path}\n{e}")
+                return
+
+    if cropped_images:
+        root.after(0, lambda: display_previews(cropped_images))
+    else:
+        messagebox.showinfo("No Images Found", "No .png images found in the input folder.")
+
+
+def select_images():
+    folder_path = filedialog.askdirectory()
+    image_paths = [os.path.join(folder_path, f) for f in os.listdir(folder_path) if f.lower().endswith(('.png', '.jpg', '.jpeg', '.bmp'))]
+
+    cropped_images = []
+    for image_path in image_paths:
+        cropped_images.extend(process_image(image_path))
+
+    return cropped_images
+
+
+def process_images_thread():
     input_path = input_label.cget("text")
     output_path = output_label.cget("text")
     cropped_images = []
 
     if os.path.isfile(input_path):
-        cropped_images.extend(process_image(input_path))
+        try:
+            cropped_images.append(process_image(input_path))
+        except Exception as e:
+            messagebox.showerror("Error", f"Error processing file: {input_path}\n{e}")
+            return
     else:
-        for file in glob.glob(os.path.join(input_path, "*.png")):
-            cropped_images.extend(process_image(file))
+        for file_path in glob.glob(os.path.join(input_path, "*.png")):
+            try:
+                cropped_images.append((PILImage.open(file_path), os.path.basename(file_path)))
+            except Exception as e:
+                messagebox.showerror("Error", f"Error processing file: {file_path}\n{e}")
+                return
 
-    display_previews(cropped_images)
-
-
-def update_image_canvas(container, cropped_images):
-    max_width = container.winfo_width()
-    max_height = container.winfo_height()
-
-    max_dimension = 800
-
-    for i, (image, file_name) in enumerate(cropped_images):
-        # Resize the image to a lower resolution
-        width, height = image.size
-        scale_ratio = max_dimension / max(width, height)
-        if scale_ratio < 1:
-            new_width = int(width * scale_ratio)
-            new_height = int(height * scale_ratio)
-            image = image.resize((new_width, new_height), PILImage.ANTIALIAS)
-
-        # Create a thumbnail for the grid display
-        image.thumbnail((128, 128))
-        photo = ImageTk.PhotoImage(image)
-
-    for i, (image, file_name) in enumerate(cropped_images):
-        original_width, original_height = image.size
-        scale_ratio = min(max_width / original_width, max_height / original_height)
-
-        new_width = int(original_width * scale_ratio)
-        new_height = int(original_height * scale_ratio)
-
-        resized_image = image.resize((new_width, new_height), PILImage.ANTIALIAS)
-        photo = ImageTk.PhotoImage(resized_image)
-
-        image_label = container.grid_slaves(row=i // 5, column=i % 5)[0]
-        if hasattr(image_label, "cached_photo"):
-            # Use cached PhotoImage if available
-            image_label.cached_photo.paste(resized_image)
-        else:
-            # Create a new PhotoImage and cache it
-            image_label.cached_photo = ImageTk.PhotoImage(resized_image)
-        image_label.config(image=image_label.cached_photo)
-        image_label.image = image_label.cached_photo
-
+    if cropped_images:
+        root.after(0, lambda: display_previews(cropped_images))
+    else:
+        messagebox.showinfo("No Images Found", "No .png images found in the input folder.")
 
 
 root = Tk()
-root.title("PNG Letter Cropper")
+root.title("Picture Pick Out")
 
-input_label = Label(root, text="Input PNG or folder", width=40, anchor="w")
-input_label.grid(row=0, column=0, padx=10, pady=10)
+input_button = Button(root, text="Select Input Folder or File", command=select_input)
+input_button.pack(pady=10)
 
-input_button = Button(root, text="Browse", command=select_input)
-input_button.grid(row=0, column=1, padx=10, pady=10)
+input_label = Label(root, text="")
+input_label.pack(pady=5)
 
-output_label = Label(root, text="Outputfolder", width=40, anchor="w")
-output_label.grid(row=1, column=0, padx=10, pady=10)
+output_button = Button(root, text="Select Output Folder", command=select_output)
+output_button.pack(pady=10)
 
-output_button = Button(root, text="Browse", command=select_output)
-output_button.grid(row=1, column=1, padx=10, pady=10)
+output_label = Label(root, text="")
+output_label.pack(pady=5)
 
-process_button = Button(root, text="Process", command=process_input)
-process_button.grid(row=2, column=0, columnspan=2, pady=10)
+process_button = Button(root, text="Process Images", command=process_input)
+process_button.pack(pady=10)
 
 root.mainloop()
+
